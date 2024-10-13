@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 from ultralytics import YOLO
 # from utils import *
 import time
-from .ransac import *
+from ransac import *
 import math
-params = [0,384*2,192*2]
+params = [0,1600/2,800/2]
 
 g8p = EightPointAlgorithmGeneralGeometry()
 ransac = RANSAC_8PA()

@@ -1,5 +1,5 @@
 import numpy as np
-from .utils1 import *
+from utils1 import *
 import time
 
 class EightPointAlgorithmGeneralGeometry:

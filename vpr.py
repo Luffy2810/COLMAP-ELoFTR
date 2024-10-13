@@ -101,7 +101,7 @@ class ImageFolderDataset(Dataset):
     def __init__(self, image_folder, transform=None):
         self.image_paths = [os.path.join(image_folder, fname) for fname in os.listdir(image_folder) if fname.endswith('.jpg')]
         self.transform = transform
-        self.map_x_32, self.map_y_32 = generate_mapping_data(7680)
+        self.map_x_32, self.map_y_32 = generate_mapping_data(IMG_WIDTH)
     def __len__(self):
         return len(self.image_paths)
     
@@ -211,9 +211,9 @@ def process_images(image_folder, model, device, fc_output_dim, batch_size, outpu
 
 # Main Execution
 if __name__ == "__main__":
-    image_folder = "/home/luffy/data/VID_20240622_155518_00_007_processed_0_2"
+    image_folder = "/home/megumi/work/sahil/data/Raghuvir/VID_20240622_155518_00_007_processed_1600_800"
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     fc_output_dim = 2048  # Adjust based on model
 
     # Process images and store results
-    process_images(image_folder, model, device, fc_output_dim, BATCH_SIZE, output_json="results_optimized.json", output_txt="image_pairs_1.txt")
+    process_images(image_folder, model, device, fc_output_dim, BATCH_SIZE, output_json="results_optimized.json", output_txt="image_pairs.txt")

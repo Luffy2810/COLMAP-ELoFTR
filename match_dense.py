@@ -5,7 +5,7 @@ from itertools import chain
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Union
-
+import cv2
 import h5py
 import numpy as np
 import torch
@@ -16,11 +16,27 @@ from eloftr import SphericalImageMatcher
 
 import logging
 
+import logging
+from packaging import version
 
+__version__ = "1.5"
+
+formatter = logging.Formatter(
+    fmt="[%(asctime)s %(name)s %(levelname)s] %(message)s", datefmt="%Y/%m/%d %H:%M:%S"
+)
+
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+handler.setLevel(logging.INFO)
 logger = logging.getLogger("hloc")
 logger.setLevel(logging.INFO)
 logger.addHandler(handler)
 logger.propagate = False
+
+
+def names_to_pair_old(name0, name1):
+    return names_to_pair(name0, name1, separator="_")
+
 
 def names_to_pair(name0, name1, separator="/"):
     return separator.join((name0.replace("/", "-"), name1.replace("/", "-")))
@@ -422,10 +438,20 @@ def aggregate_matches(
 
                 # Select top-k query kps by score (reassign matches later)
                 if max_kps:
-                    top_k = min(max_kps, cpdict[name].shape[0])
-                    top_k = np.argsort(kp_score)[::-1][:top_k]
-                    cpdict[name] = cpdict[name][top_k]
-                    kp_score = np.array(kp_score)[top_k]
+                    # top_k = min(max_kps, cpdict[name].shape[0])
+                    # top_k = np.argsort(kp_score)[::-1][:top_k]
+                    # cpdict[name] = cpdict[name][top_k]
+                    # kp_score = np.array(kp_score)[top_k]
+                    total_kps = cpdict[name].shape[0]  # Total number of available keypoints
+                    top_k = min(max_kps, total_kps)  # Limit the selection to the number of keypoints or max_kps
+                    
+                    # Randomly select indices without replacement
+                    random_k = np.random.choice(total_kps, top_k, replace=False)
+                    
+                    # Reassign the keypoints and scores based on the random selection
+                    cpdict[name] = cpdict[name][random_k]
+                    kp_score = np.array(kp_score)[random_k]
+
 
                 # Write query keypoints
                 with h5py.File(feature_path, "a") as kfd:
@@ -594,7 +620,7 @@ def main(
 
 if __name__ == "__main__":
     pairs = Path("/home/megumi/work/sahil/repos/COLMAP-ELoFTR/image_pairs.txt")  # Replace with the actual path
-    image_dir = Path("/home/megumi/work/sahil/data/Zentech/LGF_0_2")  # Replace with the actual path
+    image_dir = Path("/home/megumi/work/sahil/data/Raghuvir/VID_20240622_155518_00_007_processed_1600_800")  # Replace with the actual path
     export_dir = Path(".")  # Replace with the actual path
     matches = None
     features = None
