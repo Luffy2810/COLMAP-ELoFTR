@@ -36,7 +36,7 @@ class SphericalImageMatcher:
         self.model_type = model_type
         self.precision = precision
         self.matcher = self._initialize_matcher()
-        self.yolo_model =  YOLO("/home/megumi/work/sahil/repos/E-LoFTR_SFM/yolo_weights/best.pt")
+        self.yolo_model =  YOLO("../E-LoFTR_SFM/yolo_weights/best.pt")
 
     def _initialize_matcher(self):
         if self.model_type == 'full':
@@ -123,8 +123,15 @@ class SphericalImageMatcher:
             mkpts0 = batch['mkpts0_f'].cpu().numpy()
             mkpts1 = batch['mkpts1_f'].cpu().numpy()
             mconf = batch['mconf'].cpu().numpy()
+            points0_spherical = cam_from_img_vectorized(params,mkpts0)
+            points1_spherical = cam_from_img_vectorized(params,mkpts1)
+            inliers = ransac.get_inliers(points0_spherical.T,points1_spherical.T)
+            ransac.reset()
+            mkpts0 = mkpts0[inliers]
+            mkpts1 = mkpts1[inliers]
+            mconf = mconf[inliers]
         # print (img0.shape)
-        mkpts0,mkpts1,mconf = self.post_process_kpts(img_0,img_1,mkpts0,mkpts1,mconf)
+        # mkpts0,mkpts1,mconf = self.post_process_kpts(img_0,img_1,mkpts0,mkpts1,mconf)
         return {"keypoints0":mkpts0,"keypoints1":mkpts1,"scores":mconf}
 
 
@@ -214,3 +221,28 @@ class SphericalImageMatcher:
             })
 
         return batch_results
+
+
+if __name__ == "__main__":
+
+    img_path_0 = "/home/luffy/data/VID_20240622_155518_00_007_processed_1600_800/frame0210.jpg"
+    img_path_1 = "/home/luffy/data/VID_20240622_155518_00_007_processed_1600_800/frame0189.jpg"
+    img_0 = cv2.imread(img_path_0)
+    img_1 = cv2.imread(img_path_1)
+
+    # Initialize the matcher
+    matcher = SphericalImageMatcher(model_type='full', precision='mp')
+
+
+    t1 = time.time()
+    match_results= matcher.match(img_0, img_1)
+
+    t2 = time.time()
+    mkpts0 = match_results['keypoints0']
+    mkpts1 = match_results['keypoints1']
+    mconf = match_results['scores']
+    print (t2-t1)
+    print ("Images Matched!")
+    save_name = "vis/eloftr_direct_0_3_2.png"
+    visualize_matches(img_0, img_1, mkpts0, mkpts1, save_name,t2-t1, show_keypoints=True, title="Keypoint Matches")
+

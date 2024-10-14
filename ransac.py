@@ -114,7 +114,7 @@ def get_ransac_iterations(p_success=0.99,
 class RANSAC_8PA:
 
     def __init__(self):
-        self.residual_threshold = 1.e-4
+        self.residual_threshold = 1.e-7
         self.probability_success = 0.99
         self.expected_inliers = 0.5
         self.solver = EightPointAlgorithmGeneralGeometry()

@@ -7,6 +7,10 @@ import numpy as np
 import h5py
 from tqdm import tqdm
 import math
+import random
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+
 # matcher = SphericalImageMatcher()
 IS_PYTHON3 = sys.version_info[0] >= 3
 MAX_IMAGE_ID = 2**31 - 1
@@ -404,3 +408,67 @@ def cam_from_img_vectorized(params, points):
     v = np.sin(phi)
     w = np.sin(theta) * np.cos(phi)
     return np.column_stack((u, v, w))
+
+
+def visualize_matches(img0, img1, mkpts0, mkpts1, save_name, timetaken, show_keypoints=True, title="Keypoint Matches"):
+    """
+    Visualize the matches between two images by plotting keypoints and the matches.
+    If there are more than 100 matches, show a random 100 of them.
+
+    Parameters:
+    - img0: First image (equirectangular or cubemap).
+    - img1: Second image (equirectangular or cubemap).
+    - mkpts0: Matched keypoints in the first image (Nx2 array).
+    - mkpts1: Matched keypoints in the second image (Nx2 array).
+    - save_name: Name of the file to save the visualized matches.
+    - timetaken: Time taken to compute the matches.
+    - title: Title of the plot (default: 'Keypoint Matches').
+    - show_keypoints: Whether to display keypoints (default: True).
+    """
+    # Limit to 100 matches if there are more than 100
+    num_matches = len(mkpts0)
+    if len(mkpts0) > 250:
+        idxs = random.sample(range(len(mkpts0)), 250)
+        mkpts0 = mkpts0[idxs]
+        mkpts1 = mkpts1[idxs]
+
+    # Convert images to RGB if they are in grayscale
+    if len(img0.shape) == 2:  # Grayscale
+        img0 = cv2.cvtColor(img0, cv2.COLOR_GRAY2RGB)
+    if len(img1.shape) == 2:  # Grayscale
+        img1 = cv2.cvtColor(img1, cv2.COLOR_GRAY2RGB)
+
+    # Create a figure to display the images and the matches
+    combined_height = img0.shape[0] + img1.shape[0]
+    fig, ax = plt.subplots(1, 1, figsize=(10, 15))
+
+    # Create a combined image by stacking the two images vertically
+    combined_img = np.vstack((img0, img1))
+    ax.imshow(combined_img)
+    ax.set_title(title)
+    ax.axis('off')
+
+    # Set colormap for the matches
+    color = cm.jet(np.linspace(0, 1, len(mkpts0)))
+
+    # Extract coordinates of keypoints
+    x0, y0 = mkpts0[:, 0], mkpts0[:, 1]  # Points in image 1
+    x1, y1 = mkpts1[:, 0], mkpts1[:, 1] + img0.shape[0]  # Points in image 2 (shift y1 by image height of img0)
+
+    # Draw matches (lines connecting keypoints)
+    for i in range(len(x0)):
+        ax.plot([x0[i], x1[i]], [y0[i], y1[i]], color=color[i], linewidth=1)
+
+    # Optionally, draw the keypoints
+    if show_keypoints:
+        ax.scatter(x0, y0, 25, marker='o', facecolors='none', edgecolors='r')  # Keypoints in image 1
+        ax.scatter(x1, y1, 25, marker='o', facecolors='none', edgecolors='r')  # Keypoints in image 2
+
+    # Add text for time taken and number of matches at the top left corner
+    
+    ax.text(10, 10, f'Time taken: {timetaken:.2f} sec\nMatches: {num_matches}', 
+            fontsize=12, color='white', backgroundcolor='black', verticalalignment='top')
+
+    plt.tight_layout()
+    plt.savefig(save_name)
+    plt.show()
