@@ -86,6 +86,28 @@ CREATE_ALL = "; ".join(
     ]
 )
 
+def vector2skew_matrix(vector):
+    # Check if the input vector is a numpy or cupy array
+    if isinstance(vector, np.ndarray):
+        skew_matrix = np.zeros((3, 3))  # Use numpy for numpy input
+    else:
+        skew_matrix = cp.zeros((3, 3))  # Use cupy for cupy input
+
+    skew_matrix[1, 0] = vector[2]
+    skew_matrix[2, 0] = -vector[1]
+    skew_matrix[0, 1] = -vector[2]
+    skew_matrix[2, 1] = vector[0]
+    skew_matrix[0, 2] = vector[1]
+    skew_matrix[1, 2] = -vector[0]
+
+    return skew_matrix.copy()
+
+def spherical_normalization(array):
+    assert array.shape[0] in (3, 4)
+    if array.shape.__len__() < 2:
+        array = array.reshape(-1, 1)
+    norm = np.linalg.norm(array[0:3, :], axis=0)
+    return array[0:3, :] / norm
 
 def image_ids_to_pair_id(image_id1, image_id2):
     if image_id1 > image_id2:

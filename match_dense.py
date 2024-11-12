@@ -264,7 +264,7 @@ def match_dense(
     model = SphericalImageMatcher()
 
     dataset = ImagePairDataset(image_dir, conf["preprocessing"], pairs)
-    batch_size = conf.get('batch_size', 32)
+    batch_size = conf.get('batch_size', 1)
     loader = torch.utils.data.DataLoader(
         dataset, num_workers=16, batch_size=batch_size, shuffle=False
     )
@@ -619,8 +619,8 @@ def main(
 
 
 if __name__ == "__main__":
-    pairs = Path("/home/megumi/work/sahil/repos/COLMAP-ELoFTR/image_pairs.txt")  # Replace with the actual path
-    image_dir = Path("/home/megumi/work/sahil/data/Raghuvir/VID_20240622_155518_00_007_processed_1600_800")  # Replace with the actual path
+    pairs = Path("/home/luffy/continue/repos/COLMAP-ELoFTR/image_pairs.txt")  # Replace with the actual path
+    image_dir = Path("/home/luffy/data/VID_20240622_155518_00_007_processed_1536_768")  # Replace with the actual path
     export_dir = Path(".")  # Replace with the actual path
     matches = None
     features = None

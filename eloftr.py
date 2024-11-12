@@ -1,5 +1,5 @@
 import sys
-sys.path.append('../EfficientLoFTR')
+sys.path.append('/home/luffy/continue/repos/EfficientLoFTR')
 import cv2
 import numpy as np
 import torch
@@ -9,25 +9,13 @@ from src.utils.plotting import make_matching_figure
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 from ultralytics import YOLO
-# from utils import *
-import time
-from ransac import *
-import math
-params = [0,1600/2,800/2]
+from utils import *
+from ransac_1 import *
+
+params = [0,1536/2,768/2]
 
 g8p = EightPointAlgorithmGeneralGeometry()
 ransac = RANSAC_8PA()
-
-def cam_from_img_vectorized(params, points):
-    PI = 4 * math.atan(1)
-    c1, c2 = params[1], params[2]
-    theta = (points[:, 0] - c1) * PI / c1
-    phi = (points[:, 1] - c2) * PI / (2 * c2)
-    u = np.cos(theta) * np.cos(phi)
-    v = np.sin(phi)
-    w = np.sin(theta) * np.cos(phi)
-    return np.column_stack((u, v, w))
-
 
 class SphericalImageMatcher:
     def __init__(self, model_type='opt', precision='mp', img_width=1600, img_height=800):
@@ -36,7 +24,7 @@ class SphericalImageMatcher:
         self.model_type = model_type
         self.precision = precision
         self.matcher = self._initialize_matcher()
-        self.yolo_model =  YOLO("../E-LoFTR_SFM/yolo_weights/best.pt")
+        self.yolo_model =  YOLO("/home/luffy/continue/ultralytics/runs/detect/train2/weights/best.pt")
 
     def _initialize_matcher(self):
         if self.model_type == 'full':
@@ -50,7 +38,7 @@ class SphericalImageMatcher:
             _default_cfg['half'] = True
 
         matcher = LoFTR(config=_default_cfg)
-        matcher.load_state_dict(torch.load("../EfficientLoFTR/weights/eloftr_outdoor.ckpt")['state_dict'])
+        matcher.load_state_dict(torch.load("/home/luffy/continue/repos/EfficientLoFTR/weights/eloftr_outdoor.ckpt")['state_dict'])
         matcher = reparameter(matcher)
         if self.precision == 'fp16':
             matcher = matcher.half()
@@ -81,11 +69,11 @@ class SphericalImageMatcher:
         return mkpts,mkpts1,mconf
 
 
-    def post_process_kpts(self,img0_cubemap,img1_cubemap,mkpts0,mkpts1,mconf,pred_conf=0.2*100):
-        preds_0 = self.yolo_model(img0_cubemap, verbose=False)
-        preds_1 = self.yolo_model(img1_cubemap, verbose=False)
-        mkpts0,mkpts1,mconf = self.yolo_post_processing(preds_0,mkpts0,mkpts1,mconf)
-        mkpts1,mkpts0,mconf = self.yolo_post_processing(preds_1,mkpts1,mkpts0,mconf)
+    def post_process_kpts(self,img0_cubemap,img1_cubemap,mkpts0,mkpts1,mconf,pred_conf=0.3*100):
+        # preds_0 = self.yolo_model(img0_cubemap, verbose=False)
+        # preds_1 = self.yolo_model(img1_cubemap, verbose=False)
+        # mkpts0,mkpts1,mconf = self.yolo_post_processing(preds_0,mkpts0,mkpts1,mconf)
+        # mkpts1,mkpts0,mconf = self.yolo_post_processing(preds_1,mkpts1,mkpts0,mconf)
         ind = mconf>pred_conf
         mkpts0=mkpts0[ind]
         mkpts1=mkpts1[ind]
@@ -94,8 +82,6 @@ class SphericalImageMatcher:
 
 
     def match(self,img_0,img_1):
-        img_0 = np.squeeze(np.array(img_0))
-        img_1 = np.squeeze(np.array(img_1))
         img0_raw = cv2.cvtColor(img_0, cv2.COLOR_BGR2GRAY) if len(img_0.shape) == 3 else img_0
         img1_raw = cv2.cvtColor(img_1, cv2.COLOR_BGR2GRAY) if len(img_1.shape) == 3 else img_1
 
@@ -123,29 +109,32 @@ class SphericalImageMatcher:
             mkpts0 = batch['mkpts0_f'].cpu().numpy()
             mkpts1 = batch['mkpts1_f'].cpu().numpy()
             mconf = batch['mconf'].cpu().numpy()
-            points0_spherical = cam_from_img_vectorized(params,mkpts0)
-            points1_spherical = cam_from_img_vectorized(params,mkpts1)
-            inliers = ransac.get_inliers(points0_spherical.T,points1_spherical.T)
-            ransac.reset()
-            mkpts0 = mkpts0[inliers]
-            mkpts1 = mkpts1[inliers]
-            mconf = mconf[inliers]
-        # print (img0.shape)
-        # mkpts0,mkpts1,mconf = self.post_process_kpts(img_0,img_1,mkpts0,mkpts1,mconf)
-        return {"keypoints0":mkpts0,"keypoints1":mkpts1,"scores":mconf}
+        print (img0.shape)
+        mkpts0,mkpts1,mconf = self.post_process_kpts(img_0,img_1,mkpts0,mkpts1,mconf)
+    
+        points0_spherical = cam_from_img_vectorized(params,mkpts0)
+        points1_spherical = cam_from_img_vectorized(params,mkpts1)
+        inliers,num_inliears = ransac.get_inliers(points0_spherical.T,points1_spherical.T)
+        # print (inliers.shape)
+        ransac.reset()
+        mkpts0 = mkpts0[inliers]
+        mkpts1 = mkpts1[inliers]
+        mconf = mconf[inliers]
+        return mkpts0,mkpts1
 
 
     def match_batch(self, img_pairs, batch_size=4):
         results = []
-
+        
         img0_batch = []
         img1_batch = []
+
         img0_batch_raw = []
         img1_batch_raw = []
-
         for img_0, img_1 in img_pairs:
-            img0_raw = cv2.cvtColor(img_0.numpy(), cv2.COLOR_BGR2GRAY) if len(img_0.shape) == 3 else img_0.numpy()
-            img1_raw = cv2.cvtColor(img_1.numpy(), cv2.COLOR_BGR2GRAY) if len(img_1.shape) == 3 else img_1.numpy()
+            # print (img_0.shape)
+            img0_raw = cv2.cvtColor(img_0.numpy(), cv2.COLOR_BGR2GRAY) if len(img_0.shape) == 3 else img_0
+            img1_raw = cv2.cvtColor(img_1.numpy(), cv2.COLOR_BGR2GRAY) if len(img_1.shape) == 3 else img_1
 
             img0_raw = cv2.resize(img0_raw, (img0_raw.shape[1] // 32 * 32, img0_raw.shape[0] // 32 * 32))
             img1_raw = cv2.resize(img1_raw, (img1_raw.shape[1] // 32 * 32, img1_raw.shape[0] // 32 * 32))
@@ -162,6 +151,7 @@ class SphericalImageMatcher:
             img0_batch.append(img_0)
             img1_batch.append(img_1)
 
+            # If batch is full, process it
             if len(img0_batch) == batch_size:
                 results.extend(self._process_batch(img0_batch_raw, img1_batch_raw, img0_batch, img1_batch))
                 img0_batch = []
@@ -169,15 +159,19 @@ class SphericalImageMatcher:
                 img0_batch_raw = []
                 img1_batch_raw = []
 
+        # Process any remaining images in the final batch
         if len(img0_batch) > 0:
             results.extend(self._process_batch(img0_batch_raw, img1_batch_raw, img0_batch, img1_batch))
 
         return results
 
-    def _process_batch(self, img0_batch_raw, img1_batch_raw, img0_batch, img1_batch):
+    # Helper function to process a batch
+    def _process_batch(self, img0_batch_raw, img1_batch_raw,img0_batch,img1_batch):
         batch_results = []
+        # Create batch tensors
         img0_tensor = torch.cat(img0_batch_raw, dim=0)
         img1_tensor = torch.cat(img1_batch_raw, dim=0)
+        # print (img0_tensor.shape)
         batch = {
             'image0': img0_tensor,
             'image1': img1_tensor,
@@ -186,34 +180,49 @@ class SphericalImageMatcher:
         with torch.no_grad():
             if self.precision == 'mp':
                 with torch.autocast(enabled=True, device_type='cuda'):
-                    t1 = time.time()
                     self.matcher(batch)
-                    # print (time.time()-t1)
             else:
                 self.matcher(batch)
 
             mkpts0_batch = batch['mkpts0_f'].cpu().numpy()
             mkpts1_batch = batch['mkpts1_f'].cpu().numpy()
             mconf_batch = batch['mconf'].cpu().numpy()
-            b_ids = batch['b_ids'].cpu().numpy()
+            b_ids = batch['b_ids'].cpu().numpy()  # Get the batch IDs
 
+        # Group keypoints by batch ID
         for i in range(len(img0_batch)):
+            # Find keypoints that belong to the i-th image in the batch
             mask = b_ids == i
             mkpts0 = mkpts0_batch[mask]
             mkpts1 = mkpts1_batch[mask]
             mconf = mconf_batch[mask]
+
+            img0 = img0_batch[i]
+            img1 = img1_batch[i]
+            
+            # Post-process the keypoints (using YOLO model for filtering)
+            mkpts0, mkpts1, mconf = self.post_process_kpts(img0, img1, mkpts0, mkpts1, mconf)
+
+        
             points0_spherical = cam_from_img_vectorized(params,mkpts0)
             points1_spherical = cam_from_img_vectorized(params,mkpts1)
-            # print ()
-            inliers = ransac.get_inliers(points0_spherical.T,points1_spherical.T)
+            try:
+                inliers,num_inliears = ransac.get_inliers(points0_spherical.T,points1_spherical.T)
+            except:
+                batch_results.append({
+                'keypoints0': np.array([]),
+                'keypoints1': np.array([]),
+                'scores': np.array([])
+            })
+                ransac.reset()
+                return batch_results
+
+            # print (inliers.shape)
             ransac.reset()
+
             mkpts0 = mkpts0[inliers]
             mkpts1 = mkpts1[inliers]
             mconf = mconf[inliers]
-            img0 = img0_batch[i]
-            img1 = img1_batch[i]
-
-            # mkpts0, mkpts1, mconf = self.post_process_kpts(img0, img1, mkpts0, mkpts1, mconf)
             batch_results.append({
                 'keypoints0': mkpts0,
                 'keypoints1': mkpts1,
@@ -221,28 +230,4 @@ class SphericalImageMatcher:
             })
 
         return batch_results
-
-
-if __name__ == "__main__":
-
-    img_path_0 = "/home/luffy/data/VID_20240622_155518_00_007_processed_1600_800/frame0210.jpg"
-    img_path_1 = "/home/luffy/data/VID_20240622_155518_00_007_processed_1600_800/frame0189.jpg"
-    img_0 = cv2.imread(img_path_0)
-    img_1 = cv2.imread(img_path_1)
-
-    # Initialize the matcher
-    matcher = SphericalImageMatcher(model_type='full', precision='mp')
-
-
-    t1 = time.time()
-    match_results= matcher.match(img_0, img_1)
-
-    t2 = time.time()
-    mkpts0 = match_results['keypoints0']
-    mkpts1 = match_results['keypoints1']
-    mconf = match_results['scores']
-    print (t2-t1)
-    print ("Images Matched!")
-    save_name = "vis/eloftr_direct_0_3_2.png"
-    visualize_matches(img_0, img_1, mkpts0, mkpts1, save_name,t2-t1, show_keypoints=True, title="Keypoint Matches")
 
